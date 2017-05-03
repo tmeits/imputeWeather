@@ -57,8 +57,6 @@ plotlyVect <- function(vec.na, vec.impute, vec.title, vec.ysxis, vec.xaxis, mode
   p 
 }
 
-
-
 if (FALSE){
   plotlyNAMarkersLines()
 }

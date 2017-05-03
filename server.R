@@ -20,6 +20,9 @@ source("na_grnn.R")
 source("global-write.R")
 source("global-plot.R")
 
+require(compiler)
+enableJIT(3)
+
 read.year <- function(fileName) {
   cli_dataset <-read.table(fileName, header=FALSE, sep="")
   return(cli_dataset[1, 3])
@@ -121,13 +124,17 @@ shinyServer(
       }
     }
   })
-  #
+  
+  ##############################
+  ### getFileYear
+  ##############################
+  
   getFileYear <- reactive ({
     inFile <- input$filecli
     if (is.null(inFile)){
-      cat("Preloads year", YEAR, "\n")
+      cat("Preloads year", read.year(getNameFileCli()), "\n")
     }else{
-      cat("Uploads year\n"); cat(inFile, "\n")
+      cat("Uploads year", read.year(getNameFileCli()), "\n")
     }
   })
   #
@@ -151,12 +158,18 @@ shinyServer(
   })
   #
   output$summaryCli <- renderPrint({
+    cat("output$summaryCli <- renderPrint(\n")
     cat(getFileCli(), getFileYear(), "***\n")
-      str(currentFileInput())
-      cat("***\n")
-      summary(currentFileInput())
+    #cat(getFileCli(), "***\n")
+    str(currentFileInput())
+    cat("***\n")
+    summary(currentFileInput())
   })
-  ################################
+  
+  ##############################
+  ### precNA 
+  ##############################
+  
   output$precNA <-renderPlot({
     if(input$replaceNA == "GRNN"){
       if(input$manualSigma == TRUE){
@@ -225,6 +238,9 @@ shinyServer(
     plot(datasetInput(), col="blue")
   })
   
+  ##############################
+  # plotPrecTemp
+  ##############################
   
   output$plotPrecTemp <- renderPlot({
     #http://stackoverflow.com/questions/27350243/ggplot-line-graph-with-different-line-styles-and-markers
@@ -243,14 +259,24 @@ shinyServer(
     ## add extra space to right margin of plot within frame
     par(mar=c(5, 4, 4, 6) + 0.1)
     
+    if (input$colorPrecTemp) { 
+      colTemp <-  '#FF7F0E' #'darkred'
+      colPrec <-  '#1F77B4' #"darkblue"
+    }
+    else {
+      colTemp <-  'darkred'
+      colPrec <-  "darkblue"
+    }
+    
+    
     ## calculation of minimum maximum value of a vector
     ylimMinMAx <- c(min(tempVect, na.rm=TRUE), max(tempVect, na.rm=TRUE))
     namePlot <- getNameFileCli()
     ## Plot first set of data and draw its axis
     plot(time, tempVect, pch=16, axes=FALSE, ylim=ylimMinMAx, xlab="", ylab="", 
-         type="b",col="darkred", main=paste0("Climatic data ", namePlot)) # !!!!!
-    axis(2, ylim=ylimMinMAx, col="darkred", col.axis="darkred", las=1)  ## las=1 makes horizontal labels
-    mtext(" Temp(c)*10",side=2,line=2.5, col="darkred")
+         type="b",col=colTemp , main=paste0("Climatic data ", namePlot)) # !!!!!
+    axis(2, ylim=ylimMinMAx, col=colTemp , col.axis=colTemp , las=1)  ## las=1 makes horizontal labels
+    mtext(" Temp(c)*10",side=2,line=2.5, col=colTemp )
     box()
     
     ## Allow a second plot on the same graph
@@ -261,10 +287,10 @@ shinyServer(
    
     ## Plot the second plot and put axis scale on right
     plot(time, precVect, pch=15,  xlab="", ylab="", ylim=ylimMinMAx, 
-         axes=FALSE, type="b", col="darkblue")
+         axes=FALSE, type="b", col=colPrec)
     ## a little farther out (line=4) to make room for labels
-    mtext("Prec(mm)*10",side=4,col="darkblue",line=4) 
-    axis(4, ylim=ylimMinMAx, col="darkblue",col.axis="darkblue",las=1)
+    mtext("Prec(mm)*10",side=4,col=colPrec,line=4) 
+    axis(4, ylim=ylimMinMAx, col=colPrec,col.axis=colPrec,las=1)
     
     ## Draw the time axis
     axis(1,pretty(range(time),10))
@@ -272,16 +298,13 @@ shinyServer(
     
     ## Add Legend
     legend("topleft",legend=c("Prec","Temp"),
-           text.col=c("darkblue","darkred"),pch=c(16,15),col=c("darkblue","darkred"))
-    #qplot(temp, data=datasetInput(), geom="density", alpha=I(.5), 
-    #      main="Distribution of Gas Milage", xlab="Miles Per Gallon", 
-    #      ylab="Density")
-    #plot(datasetInput()[,1],datasetInput()[,3], col="green")
+           text.col=c(colPrec,colTemp ),pch=c(16,15),col=c(colPrec,colTemp ))
   })
   
   output$contentsPlotPrec <- renderPlot({
     plot(datasetInput()[,1],datasetInput()[,2], col="red")
   })
+  
   # 
   output$tableCli <- renderDataTable({
     currentFileInput()
@@ -302,17 +325,23 @@ shinyServer(
   ##############################
 
   output$downloadData <- downloadHandler(
-    filename = function() { 
-      paste(getNameFileCli(), '.filled', sep='') 
+    filename = function() { # create file name
+      paste0(getNameFileCli(), '.filled')
     },
     content = function(file) {
-      # filled na.spline.cli(currentFileInput())
-      # na.grnn.cli(currentFileInput()
-      #, input$countTest, 0.01, TRUE, FALSE)
-      write.csv(na.spline.cli(currentFileInput()), file)
-      #write.csv(na.grnn.cli(currentFileInput(), input$countTest, 0.01, FALSE, FALSE), file)
-    }
-  ) # currentFileInput(), na.na, paste0(getNameFileCli()
+      filled.grnn.cli <- na.grnn.cli(currentFileInput(), 108, 
+                                     input$sigmaPrecPlotly, FALSE, FALSE)
+      ymd.df <- as.data.frame.ymd(read.year(getNameFileCli()))
+      filled.cli <- data.frame(ymd.df, filled.grnn.cli$prec, filled.grnn.cli$temp)
+      # 
+      write.table(filled.cli, file, col.names=FALSE,row.names=FALSE, sep="\t")
+    } 
+  ) # downloadData <- downloadHandler(
+  
+  ##############################
+  ### downloadDataPlotly
+  ##############################
+  
   output$downloadDataPlotly <- downloadHandler(
     filename = function() { # create file name
       paste0(getNameFileCli(), '.filled')
@@ -326,7 +355,11 @@ shinyServer(
       write.table(filled.cli, file, col.names=FALSE,row.names=FALSE, sep="\t")
     }  
   ) # downloadDataPlotly <- downloadHandler(
-
+  
+  ##############################
+  ### frameShinyJS
+  ##############################
+  
   output$frameShinyJS <- renderUI({ # https://shiny.rstudio.com/articles/tag-glossary.html
     demoShinyJS <- tags$iframe(src="https://daattali.com/shiny/shinyjs-mini-demo/", height=600, width=900)
     print(demoShinyJS)
@@ -334,9 +367,8 @@ shinyServer(
   })
   
   output$yearImpute <- renderPrint({ 
-    #cat(input$sigmaPrecPlotly)
     cat(getNameFileCli(), read.year(getNameFileCli()), input$mode.edom)
-    })
+  })
   
   ###############################
   ### Plotly

@@ -18,10 +18,13 @@ require(lubridate)
 library(dplyr)
 library(plotly)
 
+require(compiler)
+enableJIT(3)
+
 shinyUI(
   tagList(
     navbarPage(
-      "VS-NNET",
+      "VS-GRNN",
       tabPanel("imputeCli",
       # theme = "cerulean",  # <--- To use a theme, uncomment this "shinythemes",
       fluidPage( theme = shinytheme("united"), #flatly #darkly #spacelab
@@ -91,6 +94,7 @@ shinyUI(
         tabPanel("Overview", 
                  #plotOutput('contentsPlot'),
                  plotOutput('plotPrecTemp'),
+                 checkboxInput('colorPrecTemp', 'Change color charts', TRUE),
                  hr(),
                  #plotOutput('contentsPlotPrec'),
                  verbatimTextOutput("summaryCli"), hr()),
